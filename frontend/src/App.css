@@ -106,6 +106,28 @@ body {
   background: #161616;
 }
 
+.result-scroll {
+  overflow-x: auto;
+}
+
+.result-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.result-table th,
+.result-table td {
+  border: 1px solid #2a2a2a;
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.result-table th {
+  color: #f5a623;
+}
+
 .thinking {
   display: flex;
   align-items: center;

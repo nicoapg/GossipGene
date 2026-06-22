@@ -85,6 +85,13 @@ export default function App() {
     setPreamble([]);
   };
 
+  // Rows executed by the recommend_query tool arrive as a structured tool-output part (not LLM text).
+  const queryResult = messages
+    .flatMap((m) => m.parts ?? [])
+    .filter((p) => p.type === "tool-recommend_query" && p.state === "output-available")
+    .map((p) => p.output)
+    .at(-1);
+
   const hasContent = preamble.length > 0 || messages.length > 0;
   const lastAssistant = messages.filter((m) => m.role === "assistant").at(-1);
   const assistantText =
@@ -127,6 +134,36 @@ export default function App() {
                   </div>
                 ) : null;
               })}
+            {queryResult && (
+              <div className="msg assistant">
+                {queryResult.error ? (
+                  <div>Query failed: {queryResult.error}</div>
+                ) : queryResult.rows.length === 0 ? (
+                  <div>No rows matched.</div>
+                ) : (
+                  <div className="result-scroll">
+                    <table className="result-table">
+                      <thead>
+                        <tr>
+                          {Object.keys(queryResult.rows[0]).map((c) => (
+                            <th key={c}>{c}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {queryResult.rows.map((row, i) => (
+                          <tr key={i}>
+                            {Object.values(row).map((v, j) => (
+                              <td key={j}>{String(v)}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
         {thinking && (
