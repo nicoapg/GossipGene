@@ -1,0 +1,17 @@
+# Python version files 
+.python-version
+
+# Generated Excel outputs
+*.xlsx
+
+#Python cache files
+__pycache__/
+*.pyc
+
+# Data Science
+data-science/eda.ipynb
+genes_human_ground_truth.csv
+genes_human.csv
+
+# Node.js dependencies
+node_modules/
