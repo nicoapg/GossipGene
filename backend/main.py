@@ -17,6 +17,8 @@ from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.ui import SSE_CONTENT_TYPE
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 
+from db import run_query
+
 # Swap this to change the model powering both agents.
 MODEL_NAME = "qwen2.5:7b"
 # MODEL_NAME = "llama3.2:3b"  # smaller/faster, weaker at structured output + SQL
@@ -41,24 +43,25 @@ _corpus = [
 ]
 _bm25 = BM25Okapi(_corpus)
 
-# Catalog of real gene symbols, used to resolve typos before SQL translation.
-_SYMBOL_BY_LOWER = {
+# Catalog of real gene symbols, used to resolve typos before SQL translation. So in our case
+# if we do not write visyn, but vissyn in the prompt, we can resolve it to visyn.
+_REAL_SYMBOL_BY_LOWERCASE = {
     r["Gene symbol"].strip().lower(): r["Gene symbol"].strip()
     for r in GENE_ROWS if r.get("Gene symbol", "").strip()
 }
-_SYMBOL_KEYS = list(_SYMBOL_BY_LOWER)
+_LOWERCASE_SYMBOLS = list(_REAL_SYMBOL_BY_LOWERCASE)
 
 
-def ground_terms(question: str) -> dict[str, str]:
+def resolve_symbol_typos(question: str) -> dict[str, str]:
     """Map typo-ish question tokens to real gene symbols that exist in the table."""
-    out = {}
-    for tok in {t.strip("?.,()") for t in question.lower().split() if len(t) >= 4}:
-        if tok in _SYMBOL_BY_LOWER:
+    corrections = {}
+    for token in {t.strip("?.,()") for t in question.lower().split() if len(t) >= 4}:
+        if token in _REAL_SYMBOL_BY_LOWERCASE:
             continue  # already exact; the translator handles it
-        match = difflib.get_close_matches(tok, _SYMBOL_KEYS, n=1, cutoff=0.8)
-        if match:
-            out[tok] = _SYMBOL_BY_LOWER[match[0]]
-    return out
+        closest_matches = difflib.get_close_matches(token, _LOWERCASE_SYMBOLS, n=1, cutoff=0.8)
+        if closest_matches:
+            corrections[token] = _REAL_SYMBOL_BY_LOWERCASE[closest_matches[0]]
+    return corrections
 
 
 class RetrieveInput(BaseModel):
@@ -148,7 +151,10 @@ async def step(label, coro):
 
 
 async def translate_question(question: str) -> str:
-    grounded = ground_terms(question)
+    logger.info(f" Translating the following question: {question}");
+    # TODO: This is right now a temporary fix to handle typos. Will need m more robust approach
+    grounded = resolve_symbol_typos(question)
+    logger.info(f" Grounded terms (original -> corrected): {grounded}");
     if grounded:
         facts = "; ".join(
             f"'{t}' is a misspelling of the real gene_symbol '{c}'"
@@ -187,15 +193,21 @@ orchestrator = Agent(
     model,
     instructions=(
         "When the user asks a data question, call the `recommend_query` tool with their question. Then reply with"
-        "exactly 'This is the recommended query:' on one line, followed by the returned query verbatim inside"
-        "a ```sql code block```. Do not alter the query."
+        "exactly 'This is the recommended query:' on one line, followed by the `sql` value verbatim inside"
+        "a ```sql code block```. Do not alter the query. Do NOT list, count, or summarize the returned rows;"
+        "the interface displays them separately."
     ),
 )
 
-
+# this comes from Pydantic -> it is a decorator that defines my func as a tool
 @orchestrator.tool_plain
-async def recommend_query(question: str) -> str:
-    return await translate_question(question)
+async def recommend_query(question: str) -> dict:
+    sql = await translate_question(question)  # single translation (incl. its internal refine loop)
+    try:
+        rows = await run_query(sql)
+        return {"sql": sql, "rows": rows, "error": None}
+    except Exception as e:  # bad SQL shouldn't trigger a tool-retry storm
+        return {"sql": sql, "rows": [], "error": str(e)}
 
 
 # Step 0: GateKeeper decides whether the DB pipeline is needed
