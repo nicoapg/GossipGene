@@ -14,43 +14,6 @@ body {
   height: 100vh;
 }
 
-.sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  background: #0a0a0a;
-  border-right: 1px solid #1f1f1f;
-  padding: 20px 16px;
-  display: flex;
-  flex-direction: column;
-}
-
-.label {
-  font-size: 11px;
-  letter-spacing: 1px;
-  color: #6b6b6b;
-  margin-bottom: 16px;
-}
-
-.chat-item {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #161616;
-  font-size: 13px;
-  color: #cfcfcf;
-}
-
-.new-task {
-  margin-top: auto;
-  padding: 12px;
-  border: none;
-  border-radius: 8px;
-  background: #f5a623;
-  color: #1a1a1a;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-}
-
 .main {
   flex: 1;
   display: flex;
