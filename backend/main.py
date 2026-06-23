@@ -1,29 +1,21 @@
-import csv
 import difflib
 import logging
 import time
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from rank_bm25 import BM25Okapi
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from pydantic_ai import Agent, NativeOutput, capture_run_messages
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.models.ollama import OllamaModel
-from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.ui import SSE_CONTENT_TYPE
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 
+from config import REFINEMENT_ROUNDS, TABLE_SCHEMA
 from db import run_query
-
-# Swap this to change the model powering both agents.
-MODEL_NAME = "qwen2.5:7b"
-# MODEL_NAME = "llama3.2:3b"  # smaller/faster, weaker at structured output + SQL
-
-model = OllamaModel(MODEL_NAME, provider=OllamaProvider(base_url="http://localhost:11434/v1"))
+# Shared model + corpus foundation lives in retrieval.py
+from retrieval import GENE_ROWS, model, search
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gossipgene")
@@ -31,23 +23,9 @@ logger = logging.getLogger("gossipgene")
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- Step 1: BM25 retrieval over the full gene table -------------------------
-CSV_PATH = Path(__file__).parent.parent / "data-science" / "genes_human_ground_truth.csv"
-with CSV_PATH.open(newline="") as f:
-    GENE_ROWS = list(csv.DictReader(f))
-
-# Searchable text per row from the free-text columns only.
-_corpus = [
-    f"{r['Gene symbol']} {r['Name']} {r['Biotype']}".lower().split()
-    for r in GENE_ROWS
-]
-_bm25 = BM25Okapi(_corpus)
-
 # Catalog of real gene symbols, used to resolve typos before SQL translation. So in our case
 # if we do not write visyn, but vissyn in the prompt, we can resolve it to visyn.
-_REAL_SYMBOL_BY_LOWERCASE = {
-    r["Gene symbol"].strip().lower(): r["Gene symbol"].strip()
-    for r in GENE_ROWS if r.get("Gene symbol", "").strip()
+_REAL_SYMBOL_BY_LOWERCASE = {r["Gene symbol"].strip().lower(): r["Gene symbol"].strip() for r in GENE_ROWS if r.get("Gene symbol", "").strip()
 }
 _LOWERCASE_SYMBOLS = list(_REAL_SYMBOL_BY_LOWERCASE)
 
@@ -71,34 +49,7 @@ class RetrieveInput(BaseModel):
 @app.post("/retrieve")
 async def retrieve(body: RetrieveInput) -> list[dict]:
     logger.info("retrieve: %r", body.question)
-    hits = _bm25.get_top_n(body.question.lower().split(), GENE_ROWS, n=5)
-    return [
-        {
-            "ensembl": h.get("Ensembl", ""),
-            "gene_symbol": h.get("Gene symbol", ""),
-            "name": h.get("Name", ""),
-            "biotype": h.get("Biotype", ""),
-            "chromosome": h.get("Chromosome", ""),
-        }
-        for h in hits
-    ]
-
-
-# Number of critique <-> revise cycles the senior runs the translator through.
-REFINEMENT_ROUNDS = 2
-
-TABLE_NAME = "genes"
-TABLE_SCHEMA = """
-Table: genes
-Column            | Meaning
-ensembl           | Stable Ensembl gene ID, e.g. ENSG00000171657
-gene_symbol       | Common short gene name, e.g. GPR82, GPX1, GPX2
-name              | Full gene name and source metadata (HGNC / EntrezGene)
-biotype           | Gene/feature type. Exact stored values (match verbatim): 'Protein Coding', 'Processed Pseudogene', 'Antisense', 'Unprocessed Pseudogene', 'Linc R N A', 'Sense Intronic', 'Misc R N A', 'T E C', 'Transcribed Unprocessed Pseudogene', 'Transcribed Unitary Pseudogene', 'Processed Transcript', 'Transcribed Processed Pseudogene'
-chromosome        | Chromosome as a string: '1'..'22' or 'X' (e.g. 'X')
-seq_region_start  | Start genomic coordinate
-seq_region_end    | End genomic coordinate
-"""
+    return await search(body.question)
 
 
 class TranslatorOutput(BaseModel):

@@ -9,7 +9,8 @@ FastAPI + Pydantic AI agent that runs a local 3B model via Ollama, streamed over
 
 ```bash
 ollama serve
-ollama pull llama3.2:3b
+ollama pull qwen2.5:7b          # generation/agents (see MODEL_NAME in retrieval.py)
+ollama pull nomic-embed-text    # dense embeddings for hybrid /retrieve
 ```
 
 ## Backend
@@ -17,8 +18,12 @@ ollama pull llama3.2:3b
 ```bash
 cd backend
 poetry install
+poetry run python -m retrieval build   # one-time: builds the dense embedding cache (~57k rows)
 poetry run uvicorn main:app --port 8000
 ```
+
+The `retrieval build` step embeds every gene row once and caches the matrix next to the
+dataset; `/retrieve` loads that cache and fails fast if it is missing.
 
 ## Frontend
 

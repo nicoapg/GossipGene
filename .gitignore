@@ -13,5 +13,8 @@ data-science/eda.ipynb
 genes_human_ground_truth.csv
 genes_human.csv
 
+# Cached dense embeddings for hybrid retrieval (rebuild with `python -m retrieval build`)
+genes_embeddings_*.npy
+
 # Node.js dependencies
 node_modules/

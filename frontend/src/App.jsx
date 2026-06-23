@@ -134,7 +134,7 @@ export default function App() {
                   </div>
                 ) : null;
               })}
-            {queryResult && (
+            {queryResult && status === "ready" && (
               <div className="msg assistant">
                 {queryResult.error ? (
                   <div>Query failed: {queryResult.error}</div>
