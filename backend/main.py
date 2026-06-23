@@ -1,4 +1,5 @@
 import difflib
+import json
 import logging
 import time
 
@@ -31,11 +32,26 @@ _LOWERCASE_SYMBOLS = list(_REAL_SYMBOL_BY_LOWERCASE)
 
 
 def resolve_symbol_typos(question: str) -> dict[str, str]:
-    """Map typo-ish question tokens to real gene symbols that exist in the table."""
+    f"""
+    Map typo-ish question tokens to single real gene symbols in the table.
+    
+    For example it returns a dictionary like {"vissyn": "VISYN1"}
+    """
+    # TODO: make this function more robust. It is rather an unstable block in the chain.
     corrections = {}
-    for token in {t.strip("?.,()") for t in question.lower().split() if len(t) >= 4}:
+    
+    # First split tokens
+    tokens = {t.strip("?.,()'\"") for t in question.lower().split()}
+
+    for token in {t for t in tokens if len(t) >= 4}:
         if token in _REAL_SYMBOL_BY_LOWERCASE:
-            continue  # already exact; the translator handles it
+            continue  # already exact; the translator handles it, something like GPX1
+
+        # Then check if the token is a substring of a real symbol -> this is for family proteins
+        symbol_substring_matches = [symbol for symbol in _LOWERCASE_SYMBOLS if token in symbol]
+        if len(symbol_substring_matches) > 1:
+            continue  # likely a gene-family search term, not a typo for one symbol
+
         closest_matches = difflib.get_close_matches(token, _LOWERCASE_SYMBOLS, n=1, cutoff=0.8)
         if closest_matches:
             corrections[token] = _REAL_SYMBOL_BY_LOWERCASE[closest_matches[0]]
@@ -107,10 +123,7 @@ async def translate_question(question: str) -> str:
     grounded = resolve_symbol_typos(question)
     logger.info(f" Grounded terms (original -> corrected): {grounded}");
     if grounded:
-        facts = "; ".join(
-            f"'{t}' is a misspelling of the real gene_symbol '{c}'"
-            for t, c in grounded.items()
-        )
+        facts = "; ".join(f"'{t}' is a misspelling of the real gene_symbol '{c}'" for t, c in grounded.items())
         question = f"{question}\n\n[Verified table facts: {facts}. Use the corrected symbol(s).]"
 
     result = await step("translate", translator_agent.run(question))
@@ -214,6 +227,9 @@ async def gate(body: GateInput) -> GateOutput:
 @app.post("/chat")
 async def chat(request: Request) -> Response:
     logger.info("chat: streaming handoff")
-    run_input = VercelAIAdapter.build_run_input(await request.body())
+    body = json.loads(await request.body())
+    if isinstance(body, dict) and isinstance(body.get("messages"), list) and body["messages"]:
+        body["messages"] = [body["messages"][-1]]
+    run_input = VercelAIAdapter.build_run_input(json.dumps(body).encode())
     adapter = VercelAIAdapter(agent=orchestrator, run_input=run_input)
     return StreamingResponse(adapter.encode_stream(adapter.run_stream()), media_type=SSE_CONTENT_TYPE,)
