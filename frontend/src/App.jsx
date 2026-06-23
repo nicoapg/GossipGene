@@ -23,6 +23,7 @@ export default function App() {
     const question = input.trim();
     if (!question) return;
     setInput("");
+    setMessages([]);
     setPreamble([{ role: "user", text: question }]);
     log("0 gate → asking", question);
 
@@ -93,11 +94,8 @@ export default function App() {
     .at(-1);
 
   const hasContent = preamble.length > 0 || messages.length > 0;
-  const lastAssistant = messages.filter((m) => m.role === "assistant").at(-1);
-  const assistantText =
-    lastAssistant?.parts.filter((p) => p.type === "text").map((p) => p.text).join("") ?? "";
 
-  const thinking = (status === "submitted" || status === "streaming") && !assistantText;
+  const thinking = status === "submitted" || status === "streaming";
 
   return (
     <div className="app">
@@ -121,48 +119,40 @@ export default function App() {
                 {m.text}
               </div>
             ))}
-            {messages
-              .filter((m) => m.role === "assistant")
-              .map((m) => {
-                const text = m.parts
-                  .filter((p) => p.type === "text")
-                  .map((p) => p.text)
-                  .join("");
-                return text ? (
-                  <div key={m.id} className="msg assistant">
-                    {text}
-                  </div>
-                ) : null;
-              })}
             {queryResult && status === "ready" && (
-              <div className="msg assistant">
-                {queryResult.error ? (
-                  <div>Query failed: {queryResult.error}</div>
-                ) : queryResult.rows.length === 0 ? (
-                  <div>No rows matched.</div>
-                ) : (
-                  <div className="result-scroll">
-                    <table className="result-table">
-                      <thead>
-                        <tr>
-                          {Object.keys(queryResult.rows[0]).map((c) => (
-                            <th key={c}>{c}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {queryResult.rows.map((row, i) => (
-                          <tr key={i}>
-                            {Object.values(row).map((v, j) => (
-                              <td key={j}>{String(v)}</td>
+              <>
+                <div className="msg assistant">
+                  {`This is the recommended query:\n\`\`\`sql\n${queryResult.sql}\n\`\`\``}
+                </div>
+                <div className="msg assistant">
+                  {queryResult.error ? (
+                    <div>Query failed: {queryResult.error}</div>
+                  ) : queryResult.rows.length === 0 ? (
+                    <div>No rows matched.</div>
+                  ) : (
+                    <div className="result-scroll">
+                      <table className="result-table">
+                        <thead>
+                          <tr>
+                            {Object.keys(queryResult.rows[0]).map((c) => (
+                              <th key={c}>{c}</th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                        </thead>
+                        <tbody>
+                          {queryResult.rows.map((row, i) => (
+                            <tr key={i}>
+                              {Object.values(row).map((v, j) => (
+                                <td key={j}>{String(v)}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}
