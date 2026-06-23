@@ -8,3 +8,4 @@ fastapi = "*"
 uvicorn = { extras = ["standard"], version = "*" }
 rank-bm25 = "*"
 duckdb = "*"
+numpy = "*"

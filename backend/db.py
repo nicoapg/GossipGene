@@ -1,19 +1,15 @@
 """Embedded DuckDB query layer.
 
 This is a transitory solution to handle DB outside the main.py file. 
-In an ideal scenario I'd replace this with a proper DB layer. 
+TODO: In an ideal scenario I'd replace this with a proper DB layer. 
 The dataset path is read from the GENES_CSV env var so Docker can mount/override it.
 """
 
 import asyncio
-import os
-from pathlib import Path
 
 import duckdb
 
-CSV_PATH = Path(
-    os.getenv("GENES_CSV", Path(__file__).parent.parent / "data-science" / "genes_human_ground_truth.csv")
-)
+from config import CSV_PATH
 
 # One in-memory connection. The genes table exposes the agent target, mapped from CSV headers.
 _db = duckdb.connect(":memory:")
