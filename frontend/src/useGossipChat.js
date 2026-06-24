@@ -22,16 +22,19 @@ export function useGossipChat() {
     onFinish: ({ message }) => log("2 chat ← done with the complete loop", message),
     onError: (err) => log("2 chat ✗ stream error", err),
   });
+
   // Separate stream for direct (non-DB) answers from the GateKeeper path.
-  const answerChat = useChat({
-    transport: new DefaultChatTransport({ api: `${API}/answer` }),
-  });
+  const answerChat = useChat({transport: new DefaultChatTransport({ api: `${API}/answer` }),});
+
   const [input, setInput] = useState("");
-  // Step 1 messages (user echo, loading notices, retrieved rows) here, separate from the useChat-managed Step 2 stream.
+
+  // Step 1 messages (retrieved rows for example) here, separate from the useChat-managed Step 2 stream.
   const [preamble, setPreamble] = useState([]);
 
-  const send = async (e) => {
-    e.preventDefault();
+  // This activates teh GateKeeper and the Retrieval pipeline.
+  const send = async (event) => {
+    // here we avoid default browser behavior to avoid losing information when the user presses enter.
+    event.preventDefault();
     const question = input.trim();
     if (!question) return;
     setInput("");
@@ -41,31 +44,27 @@ export function useGossipChat() {
     setPreamble([userMsg]);
     log("0 gate → asking", question);
 
-    // Step 0: GateKeeper decides whether we need the DB pipeline at all - unrelated questions are directly answered
-    // The decision has two fields: use_database (boolean - do we need to query the database?)
-    // and answer (string - the answer to the question).
+    // Step 0: GateKeeper decides whether we need the DB pipeline at all - unrelated questions are directly answered    
     const gatekeeperDecision = await postJSON("/gate", { question });
     log("0 gate - First we want to check if the question is related to the database.");
     log("0 gate ← decision", gatekeeperDecision);
 
     // If gatekeeperDecision.use_database is false, we stream a direct answer, no need to query
     if (!gatekeeperDecision.use_database) {
-      log("0 gate → streaming direct answer");
+      log("0 gate → use database is false, streaming direct answer");
       answerChat.sendMessage({ text: question });
       return;
     }
 
-    // Step 1: retrieve candidate rows.
+    // Step 1: retrieve candidate rows -> this is hybrid searc.
     const searchMsg = { role: "assistant", text: "First I will run a quick search with your query." };
     setPreamble([userMsg, searchMsg]);
 
     log("1 retrieve → searching in the database, via BM25 retrieval");
-
     const rows = await postJSON("/retrieve", { question });
+    
     log("1 retrieve ← rows", rows.length);
-    const list = rows
-      .map((r) => `- ${r.gene_symbol || r.ensembl} - ${r.name} (${r.biotype}, chr ${r.chromosome})`)
-      .join("\n");
+    const list = rows.map((r) => `- ${r.gene_symbol || r.ensembl} - ${r.name} (${r.biotype}, chr ${r.chromosome})`).join("\n");
 
     setPreamble([userMsg, searchMsg, { role: "assistant", text: `Possible answers:\n${list}` }]);
 

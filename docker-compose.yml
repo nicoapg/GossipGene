@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_HOST: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux parity; no-op on macOS
+    volumes:
+      - ./backend:/app/backend                 # source for uvicorn --reload
+      - ./data-science:/app/data-science       # CSV + .npy cache, read-write
+    healthcheck:                               # FastAPI serves /openapi.json by default
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/openapi.json').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"              # reliable HMR over macOS bind mounts
+    volumes:
+      - ./frontend:/app                        # live source for HMR
+      - /app/node_modules                      # keep container's node_modules
+    depends_on:
+      backend:
+        condition: service_healthy             # don't expose UI before API is reachable

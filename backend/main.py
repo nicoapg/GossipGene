@@ -26,11 +26,33 @@ from db import run_query
 # Shared corpus foundation lives in retrieval.py
 from retrieval import GENE_ROWS, search
 
+
+# ============================ App & logging ============================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gossipgene")
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+# ============================ Request models ===========================
+class RetrieveInput(BaseModel):
+    question: str
+
+
+class GateInput(BaseModel):
+    question: str
+
+
+# ============================ Helpers ==================================
+async def step(label, coro):
+    """Log the start and elapsed time of an awaited step so a stall shows which step never finished."""
+    logger.info("→ %s", label)
+    t = time.perf_counter()
+    out = await coro
+    logger.info("← %s (%.1fs)", label, time.perf_counter() - t)
+    return out
+
 
 # Catalog of real gene symbols, used to resolve typos before SQL translation. So in our case
 # if we do not write visyn, but vissyn in the prompt, we can resolve it to visyn.
@@ -66,25 +88,7 @@ def resolve_symbol_typos(question: str) -> dict[str, str]:
     return corrections
 
 
-class RetrieveInput(BaseModel):
-    question: str
-
-
-@app.post("/retrieve")
-async def retrieve(body: RetrieveInput) -> list[dict]:
-    logger.info("retrieve: %r", body.question)
-    return await search(body.question)
-
-
-async def step(label, coro):
-    """Log the start and elapsed time of an awaited step so a stall shows which step never finished."""
-    logger.info("→ %s", label)
-    t = time.perf_counter()
-    out = await coro
-    logger.info("← %s (%.1fs)", label, time.perf_counter() - t)
-    return out
-
-
+# ============================ Translation pipeline =====================
 async def translate_question(question: str) -> str:
     logger.info(f" Translating the following question: {question}");
     # TODO: This is right now a temporary fix to handle typos. Will need m more robust approach
@@ -132,10 +136,7 @@ async def recommend_query(question: str) -> dict:
         return {"sql": sql, "rows": [], "error": str(e)}
 
 
-class GateInput(BaseModel):
-    question: str
-
-
+# ============================ HTTP endpoints ===========================
 @app.post("/gate")
 async def gate(body: GateInput) -> GateOutput:
     with capture_run_messages() as messages:
@@ -149,6 +150,12 @@ async def gate(body: GateInput) -> GateOutput:
             # ToDo: Handle edge case.
             logger.warning("GateKeeper flaked; raw messages:\n%s", messages)
             return GateOutput(use_database=True)
+
+
+@app.post("/retrieve")
+async def retrieve(body: RetrieveInput) -> list[dict]:
+    logger.info("retrieve: %r", body.question)
+    return await search(body.question)
 
 
 @app.post("/chat")

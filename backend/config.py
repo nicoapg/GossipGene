@@ -8,7 +8,7 @@ DATA_DIR = Path(__file__).parent.parent / "data-science"
 CSV_PATH = Path(os.getenv("GENES_CSV", DATA_DIR / "genes_human_ground_truth.csv"))
 
 # Ollama and models
-OLLAMA_HOST = "http://localhost:11434"
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_OPENAI_URL = f"{OLLAMA_HOST}/v1"  # OpenAI-compatible endpoint for the chat model
 CHAT_MODEL = "qwen2.5:7b"
 # CHAT_MODEL = "llama3.2:3b"  # smaller & faster but weaker at structured output + SQL -> this lead to quite a bit of errors

@@ -27,9 +27,9 @@ async def run_query(sql: str) -> list[dict]:
         raise ValueError("Only SELECT queries are allowed")
 
     def _exec():
-        cursor = _db.cursor()  # cursor() is the thread-safe unit in DuckDB
+        cursor = _db.cursor()  
         cursor.execute(sql)
         cols = [d[0] for d in cursor.description]
         return [dict(zip(cols, row)) for row in cursor.fetchall()]
-
-    return await asyncio.to_thread(_exec)  # keep blocking DB work off the event loop
+    # 
+    return await asyncio.to_thread(_exec) # this helps with concurrency.
