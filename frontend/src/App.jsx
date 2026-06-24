@@ -9,23 +9,29 @@ function getGreeting(hour) {
   return "Good Night";
 }
 
-// Frontend-only "typing" reveal for static text bubbles (purely a UX gimmick).
+// Frontend-only "typing" 
+// TODO: This kind of frontend animations would need more efficient implementation. (e.g. multiple tasks running in parallel)
 function Typewriter({ text, speed = 12 }) {
+  // "shown" holds the part of the text that is currently visible on screen.
   const [shown, setShown] = useState("");
+  // A timer reveals one more character every few milliseconds, like typing.
   useEffect(() => {
     setShown("");
     let i = 0;
     const id = setInterval(() => {
       i += 1;
       setShown(text.slice(0, i));
+      // this is the stop condition
       if (i >= text.length) clearInterval(id);
     }, speed);
+    // Stop the timer when the text changes or the component goes away.
     return () => clearInterval(id);
-  }, [text, speed]);
+  }, [text, speed]); // text and speed are the dependencies that control how this re-runs
   return shown;
 }
 
 export default function App() {
+  // Destructuring the useGossipChat returns
   const { input, setInput, send, preamble, queryResult, directAnswer, status, hasContent, thinking } =
     useGossipChat();
 
@@ -87,6 +93,12 @@ export default function App() {
             <span className="dot" /> Thinking…
           </div>
         )}
+        {
+        /* This is where submission is taking place 
+        
+        TODO: Improve box container and "thinking" display
+        
+        */}
         <form className="input-bar" onSubmit={send}>
           <input
             value={input}
